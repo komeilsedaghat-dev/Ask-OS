@@ -1,4 +1,5 @@
 import subprocess
+import sys
 import typer
 from rich.console import Console
 
@@ -11,29 +12,62 @@ class CommandExecutor:
     def __init__(self):
         pass
 
-    def execute(self, command: str) -> int:
+    def execute(self, command: str) -> tuple[int, str]:
         """
-        Safely prompts the user for confirmation and runs the command in a subprocess.
+        Safely prompts the user for confirmation and runs the command in a subprocess,
+        streaming stdout/stderr in real-time while capturing it.
+        
+        Returns:
+            (exit_code, captured_output)
         """
-        # Ask the user for confirmation
         confirm = typer.confirm("Do you want to run this command?", default=False)
         
         if not confirm:
             console.print("[yellow]Execution cancelled.[/yellow]")
-            return 130  # Standard exit code for cancellation
+            return 130, ""
         
         console.print("[dim yellow]Executing command...\n[/dim yellow]")
         
+        captured_output = []
+        returncode = 0
+        
         try:
-            # Run the command with shell=True to support pipes, redirects, and environment variables
-            result = subprocess.run(command, shell=True)
+            # Run the command, merging stderr into stdout, and streaming it
+            process = subprocess.Popen(
+                command,
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+            )
             
-            console.print()
-            if result.returncode == 0:
-                console.print("[bold green]✓ Command completed successfully.[/bold green]")
-            else:
-                console.print(f"[bold red]✗ Command exited with code {result.returncode}.[/bold red]")
-            return result.returncode
+            while True:
+                line = process.stdout.readline()
+                if not line and process.poll() is not None:
+                    break
+                if line:
+                    sys.stdout.write(line)
+                    sys.stdout.flush()
+                    captured_output.append(line)
+                    
+            returncode = process.wait()
+            
+        except KeyboardInterrupt:
+            console.print("\n[bold red]Execution interrupted by user.[/bold red]")
+            if process:
+                process.terminate()
+                process.wait()
+            return 130, "".join(captured_output)
+            
         except Exception as e:
             console.print(f"[bold red]Execution error:[/bold red] {e}")
-            return 1
+            return 1, "".join(captured_output)
+            
+        console.print()
+        if returncode == 0:
+            console.print("[bold green]✓ Command completed successfully.[/bold green]")
+        else:
+            console.print(f"[bold red]✗ Command exited with code {returncode}.[/bold red]")
+            
+        return returncode, "".join(captured_output)

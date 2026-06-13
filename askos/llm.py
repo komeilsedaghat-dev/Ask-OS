@@ -71,3 +71,47 @@ class LLMClient:
         cache.set_cached_command(prompt, self.model_name, command)
                 
         return command, False
+
+    def generate_correction(self, prompt: str, failed_command: str, error_output: str) -> str:
+        """
+        Translates the error output of a failed command back into a corrected command.
+        """
+        os_name = platform.system()
+        
+        system_prompt = (
+            f"You are an expert terminal command debugger for {os_name}.\n"
+            "The user previously requested a command, which failed with an error.\n"
+            "Analyze the original natural language prompt, the failed command, and its error output, "
+            "then generate a single, valid, and corrected terminal command.\n"
+            "Respond ONLY with the raw command. Do not wrap it in markdown code blocks, "
+            "do not add explanations, and do not write anything else."
+        )
+
+        user_message = (
+            f"Original Request: {prompt}\n"
+            f"Failed Command: {failed_command}\n"
+            f"Error Output:\n{error_output}"
+        )
+
+        response = self.client.chat.completions.create(
+            model=self.model_name,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ],
+            temperature=0.0,
+        )
+        
+        command = response.choices[0].message.content.strip()
+        
+        # Clean any accidental markdown code blocks
+        if command.startswith("```"):
+            lines = command.splitlines()
+            if len(lines) >= 2:
+                if lines[0].startswith("```"):
+                    lines = lines[1:]
+                if lines[-1].startswith("```"):
+                    lines = lines[:-1]
+                command = "\n".join(lines).strip()
+                
+        return command

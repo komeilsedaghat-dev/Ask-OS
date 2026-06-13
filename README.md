@@ -51,37 +51,58 @@ pip install git+https://github.com/komeilsedaghat-dev/Ask-OS.git
 
 ## Configuration
 
-Ask-OS reads your credentials from environment variables. You can configure them by creating a `.env` file in your project or home directory:
+Ask-OS supports both **global configuration** and **local directory overrides**:
 
-1. Copy the example file:
-   ```bash
-   cp .env.example .env
-   ```
-2. Populate `.env` with your API credentials:
-   ```ini
-   OPENAI_API_KEY=your_actual_api_key
-   OPENAI_BASE_URL=https://api.openai.com/v1
-   OPENAI_MODEL_NAME=gpt-4o-mini
-   ```
+### 1. Interactive Global Configuration (Recommended)
+You can configure your settings globally without manually editing files:
+```bash
+askos configure
+```
+This will interactively prompt you for your API credentials and save them securely to `~/.config/askos/.env`.
+
+### 2. Local Environment Variables (.env)
+For project-specific settings, create a `.env` file in your current working directory. Values in your local `.env` take precedence over your global configurations:
+```ini
+OPENAI_API_KEY=your_local_api_key
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL_NAME=gpt-4o-mini
+```
 
 ---
 
 ## Usage
 
-Run the `askos` command followed by your natural language prompt:
+Ask-OS dynamically routes your commands based on subcommands. 
 
+### 1. Ask Command (Default Action)
+To ask for a command, just call `askos` with your prompt:
 ```bash
 askos "find all python files in the downloads directory"
 ```
-
-### Options & Overrides
-You can override your `.env` settings dynamically at runtime using flags:
-
+#### Options & Overrides
+You can override your configured settings dynamically at runtime using flags:
 - **`-k, --api-key`**: Override OpenAI API key.
-- **`-u, --base-url`**: Override API base URL (e.g., for custom endpoints or Ollama).
+- **`-u, --base-url`**: Override API base URL.
 - **`-m, --model`**: Override target model name.
 
-**Example using custom endpoint and model:**
+*Example using custom endpoint and model:*
 ```bash
 askos "list docker containers running on port 80" -u "http://localhost:11434/v1" -m "llama3"
+```
+
+### 2. Self-Correction Flow
+If a command you confirmed fails (exits with a non-zero code), Ask-OS will ask:
+```
+⚠ Command failed. Would you like the AI to generate a corrected version? [y/N]:
+```
+If you choose `y`, the assistant will analyze the terminal error logs, construct a corrected command, and prompt you to run it.
+
+### 3. Cache Management
+View cache database statistics or clear saved queries:
+```bash
+# View cache usage, database size, and location
+askos cache stats
+
+# Remove all cached queries
+askos cache clear
 ```
