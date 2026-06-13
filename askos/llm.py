@@ -115,3 +115,24 @@ class LLMClient:
                 command = "\n".join(lines).strip()
                 
         return command
+
+    def explain_command(self, command: str) -> str:
+        """
+        Generates a plain-English explanation of the terminal command.
+        """
+        system_prompt = (
+            "You are an expert command line tutor.\n"
+            "The user will provide a terminal command. Your job is to explain what it does step-by-step in plain English.\n"
+            "Keep the explanation clean, short, and bulleted. Avoid long introductions."
+        )
+
+        response = self.client.chat.completions.create(
+            model=self.model_name,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": command}
+            ],
+            temperature=0.0,
+        )
+        
+        return response.choices[0].message.content.strip()

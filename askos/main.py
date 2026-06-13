@@ -18,7 +18,7 @@ app.add_typer(cache_app, name="cache")
 
 console = Console()
 
-def execute_ask_flow(prompt: str, api_key: str, base_url: str, model_name: str):
+def execute_ask_flow(prompt: str, api_key: str, base_url: str, model_name: str, explain: bool = False):
     """
     Main flow for translating prompt -> command -> confirming execution -> offering correction.
     """
@@ -59,6 +59,21 @@ def execute_ask_flow(prompt: str, api_key: str, base_url: str, model_name: str):
             )
         )
         console.print()
+
+        # If --explain flag is set, generate and display step-by-step explanation
+        if explain:
+            console.print("[dim yellow]Generating command explanation...[/dim yellow]")
+            client = LLMClient(api_key=api_key, base_url=base_url, model_name=resolved_model)
+            explanation = client.explain_command(command)
+            console.print(
+                Panel(
+                    explanation,
+                    title="[bold yellow]Command Explanation[/bold yellow]",
+                    border_style="yellow",
+                    expand=False,
+                )
+            )
+            console.print()
         
         # Execute the command with user confirmation
         executor = CommandExecutor()
@@ -122,11 +137,17 @@ def ask(
         "-m",
         help="Model name (overrides environment config).",
     ),
+    explain: bool = typer.Option(
+        False,
+        "--explain",
+        "-e",
+        help="Generate a step-by-step explanation of the proposed command before execution.",
+    ),
 ):
     """
     Translate a natural language prompt into an OS command and run it safely.
     """
-    execute_ask_flow(prompt, api_key, base_url, model_name)
+    execute_ask_flow(prompt, api_key, base_url, model_name, explain)
 
 @app.callback()
 def callback():
