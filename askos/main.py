@@ -79,6 +79,9 @@ def execute_ask_flow(prompt: str, api_key: str, base_url: str, model_name: str, 
         executor = CommandExecutor()
         exit_code, output = executor.execute(command)
         
+        # Log execution
+        cache.log_execution(prompt, command, exit_code)
+        
         # If command fails (excluding user cancellation 130), offer self-correction
         if exit_code != 0 and exit_code != 130:
             console.print()
@@ -104,6 +107,7 @@ def execute_ask_flow(prompt: str, api_key: str, base_url: str, model_name: str, 
                 
                 # Execute the corrected command
                 exit_code, _ = executor.execute(corrected_command)
+                cache.log_execution(prompt + " (corrected)", corrected_command, exit_code)
                 
         raise typer.Exit(code=exit_code)
         
@@ -243,11 +247,45 @@ def cache_stats():
     except Exception as e:
         console.print(f"[bold red]Failed to retrieve stats:[/bold red] {e}")
 
+@app.command()
+def history(
+    limit: int = typer.Option(
+        10,
+        "--limit",
+        "-l",
+        help="Number of history records to display.",
+    )
+):
+    """
+    View command execution history.
+    """
+    records = cache.get_history(limit)
+    if not records:
+        console.print("[yellow]No execution history found yet.[/yellow]")
+        return
+        
+    from rich.table import Table
+    table = Table(title="[bold cyan]Ask-OS Command Execution History[/bold cyan]")
+    table.add_column("Date/Time", style="dim")
+    table.add_column("Prompt", style="blue")
+    table.add_column("Command Executed", style="green")
+    table.add_column("Status", justify="center")
+    
+    for prompt, command, exit_code, date_str in records:
+        status = "[green]✓ Success[/green]" if exit_code == 0 else f"[red]✗ Failed ({exit_code})[/red]"
+        if exit_code == 130:
+            status = "[yellow]Cancelled[/yellow]"
+        table.add_row(date_str, prompt, command, status)
+        
+    console.print()
+    console.print(table)
+    console.print()
+
 def main_entrypoint():
     """
     Custom wrapper to support calling `askos "prompt"` directly as a default command.
     """
-    subcommands = {"configure", "cache", "--help", "-h"}
+    subcommands = {"configure", "cache", "history", "--help", "-h"}
     if len(sys.argv) > 1 and sys.argv[1] not in subcommands:
         sys.argv.insert(1, "ask")
     app()
