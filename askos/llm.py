@@ -37,13 +37,17 @@ class LLMClient:
             return cached_command, True
 
         os_name = platform.system()
+        from askos.utils import collect_environment_context
+        env_context = collect_environment_context()
         
         system_prompt = (
             f"You are a terminal command generator for {os_name}.\n"
             "Your task is to convert the user's natural language request into a single, valid terminal command.\n"
             "Respond ONLY with the raw command. Do not wrap it in markdown code blocks (like ```bash), "
             "do not explain the command, and do not add any extra commentary or formatting. "
-            "Just return the raw terminal command itself."
+            "Just return the raw terminal command itself.\n\n"
+            "Generate your command according to this system context:\n"
+            f"{env_context}"
         )
 
         response = self.client.chat.completions.create(
@@ -77,6 +81,8 @@ class LLMClient:
         Translates the error output of a failed command back into a corrected command.
         """
         os_name = platform.system()
+        from askos.utils import collect_environment_context
+        env_context = collect_environment_context()
         
         system_prompt = (
             f"You are an expert terminal command debugger for {os_name}.\n"
@@ -84,7 +90,9 @@ class LLMClient:
             "Analyze the original natural language prompt, the failed command, and its error output, "
             "then generate a single, valid, and corrected terminal command.\n"
             "Respond ONLY with the raw command. Do not wrap it in markdown code blocks, "
-            "do not add explanations, and do not write anything else."
+            "do not add explanations, and do not write anything else.\n\n"
+            "Generate your corrected command according to this system context:\n"
+            f"{env_context}"
         )
 
         user_message = (
