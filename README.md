@@ -28,11 +28,19 @@ To save costs and improve performance, it includes a local SQLite3-backed cachin
 
 ## Installation
 
-### Option 1: Install directly from GitHub (Recommended)
-Install globally or inside your active virtual environment:
-```bash
-pip install git+https://github.com/komeilsedaghat-dev/Ask-OS.git
-```
+### Option 1: Global Installation using `pipx` (Recommended)
+This is the easiest way to install Ask-OS globally on modern OS environments without encountering conflicts (PEP 668):
+
+1. **Install `pipx`** if you don't have it already:
+   - **Debian/Ubuntu**: `sudo apt install pipx && pipx ensurepath`
+   - **macOS (Homebrew)**: `brew install pipx && pipx ensurepath`
+   - **Windows**: `pip install pipx && pipx ensurepath`
+   *(Note: Remember to restart your terminal after running `ensurepath` so the changes take effect)*
+
+2. **Install Ask-OS**:
+   ```bash
+   pipx install git+https://github.com/komeilsedaghat-dev/Ask-OS.git
+   ```
 
 ### Option 2: Local Development Setup
 1. Clone the repository:
@@ -40,7 +48,7 @@ pip install git+https://github.com/komeilsedaghat-dev/Ask-OS.git
    git clone https://github.com/komeilsedaghat-dev/Ask-OS.git
    cd Ask-OS
    ```
-2. Set up virtual environment and install packages in editable mode:
+2. Set up a virtual environment and install the package in editable mode:
    ```bash
    python -m venv venv
    source venv/bin/activate
