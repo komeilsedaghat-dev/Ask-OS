@@ -25,7 +25,7 @@ class LLMClient:
 
     def generate_command(self, prompt: str) -> tuple[str, bool]:
         """
-        Translates a natural language user prompt into a single clean OS command.
+        Translates a natural language user prompt into a clean OS command or sequence of chained commands.
         Checks the cache first.
         
         Returns:
@@ -42,10 +42,11 @@ class LLMClient:
         
         system_prompt = (
             f"You are a terminal command generator for {os_name}.\n"
-            "Your task is to convert the user's natural language request into a single, valid terminal command.\n"
-            "Respond ONLY with the raw command. Do not wrap it in markdown code blocks (like ```bash), "
+            "Your task is to convert the user's natural language request into a valid terminal command or a sequence of chained/combined commands (using operators like &&, ;, or newlines as appropriate for the shell) to achieve the goal.\n"
+            "If the request requires multiple steps or commands, chain them appropriately (prefer using logical chaining operators like && or ;, or system-appropriate ways rather than multiline script blocks, to make it easier to view and edit in-place).\n"
+            "Respond ONLY with the raw command(s). Do not wrap it in markdown code blocks (like ```bash), "
             "do not explain the command, and do not add any extra commentary or formatting. "
-            "Just return the raw terminal command itself.\n\n"
+            "Just return the raw command execution block itself.\n\n"
             "Generate your command according to this system context:\n"
             f"{env_context}"
         )
@@ -78,7 +79,7 @@ class LLMClient:
 
     def generate_correction(self, prompt: str, failed_command: str, error_output: str) -> str:
         """
-        Translates the error output of a failed command back into a corrected command.
+        Translates the error output of a failed command back into a corrected command or sequence of commands.
         """
         os_name = platform.system()
         from askos.utils import collect_environment_context
@@ -88,8 +89,9 @@ class LLMClient:
             f"You are an expert terminal command debugger for {os_name}.\n"
             "The user previously requested a command, which failed with an error.\n"
             "Analyze the original natural language prompt, the failed command, and its error output, "
-            "then generate a single, valid, and corrected terminal command.\n"
-            "Respond ONLY with the raw command. Do not wrap it in markdown code blocks, "
+            "then generate a valid, corrected terminal command or sequence of commands.\n"
+            "If multiple steps or commands are needed, chain them appropriately using operators like && or ; (prefer single-line chaining where possible).\n"
+            "Respond ONLY with the raw command(s). Do not wrap it in markdown code blocks, "
             "do not add explanations, and do not write anything else.\n\n"
             "Generate your corrected command according to this system context:\n"
             f"{env_context}"
