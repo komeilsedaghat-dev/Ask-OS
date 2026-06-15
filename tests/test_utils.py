@@ -18,12 +18,17 @@ def test_collect_environment_context(mocker):
     # Mock root privileges
     mocker.patch("os.getuid", return_value=0)
     
+    # Mock directory listing (ignoring venv and .git)
+    mocker.patch("os.listdir", return_value=["main.py", "tests", "venv", ".git"])
+    mocker.patch("os.path.isdir", side_effect=lambda x: x == "tests")
+    
     context = collect_environment_context()
     
     assert "Target OS: Linux" in context
     assert "Active Shell: zsh" in context
     assert "Privilege Level: root/administrator (sudo not needed)" in context
     assert "Available Installers/CLI Tools: apt-get, pip" in context
+    assert "Current Directory Contents: tests/, main.py" in context
 
 def test_collect_environment_context_non_root(mocker):
     mocker.patch("platform.system", return_value="Darwin")
