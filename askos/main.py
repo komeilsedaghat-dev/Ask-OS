@@ -64,15 +64,24 @@ def execute_ask_flow(prompt: str, api_key: str, base_url: str, model_name: str, 
         if explain:
             console.print("[dim yellow]Generating command explanation...[/dim yellow]")
             client = LLMClient(api_key=api_key, base_url=base_url, model_name=resolved_model)
-            explanation = client.explain_command(command)
-            console.print(
-                Panel(
-                    explanation,
-                    title="[bold yellow]Command Explanation[/bold yellow]",
-                    border_style="yellow",
-                    expand=False,
-                )
+            
+            from rich.live import Live
+            from rich.markdown import Markdown
+            
+            explanation_chunks = []
+            panel = Panel(
+                "",
+                title="[bold yellow]Command Explanation[/bold yellow]",
+                border_style="yellow",
+                expand=False,
             )
+            
+            with Live(panel, console=console, refresh_per_second=10) as live:
+                for chunk in client.explain_command_stream(command):
+                    explanation_chunks.append(chunk)
+                    markdown_text = "".join(explanation_chunks)
+                    panel.renderable = Markdown(markdown_text)
+                    live.update(panel)
             console.print()
         
         # Execute the command with user confirmation
