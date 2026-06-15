@@ -21,29 +21,33 @@ class CommandExecutor:
             (exit_code, captured_output)
         """
         # Loop to handle Run, Cancel, or Edit actions
-        while True:
-            choice = typer.prompt(
-                "Action? [y]run, [n]cancel, [e]edit",
-                default="y",
-            ).strip().lower()
-            
-            if choice == "y":
-                break
-            elif choice == "n":
-                console.print("[yellow]Execution cancelled.[/yellow]")
-                return 130, ""
-            elif choice == "e":
-                import readline
-                # Prefill the command input buffer so the user can edit in-place
-                readline.set_startup_hook(lambda: readline.insert_text(command))
-                try:
-                    command = input("Edit command: ").strip()
-                finally:
-                    readline.set_startup_hook() # Clear hook
+        try:
+            while True:
+                choice = typer.prompt(
+                    "Action? [y]run, [n]cancel, [e]edit",
+                    default="y",
+                ).strip().lower()
                 
-                console.print(f"[dim yellow]Updated command: {command}[/dim yellow]\n")
-            else:
-                console.print("[red]Invalid option. Please choose y, n, or e.[/red]")
+                if choice == "y":
+                    break
+                elif choice == "n":
+                    console.print("[yellow]Execution cancelled.[/yellow]")
+                    return 130, ""
+                elif choice == "e":
+                    import readline
+                    # Prefill the command input buffer so the user can edit in-place
+                    readline.set_startup_hook(lambda: readline.insert_text(command))
+                    try:
+                        command = input("Edit command: ").strip()
+                    finally:
+                        readline.set_startup_hook() # Clear hook
+                    
+                    console.print(f"[dim yellow]Updated command: {command}[/dim yellow]\n")
+                else:
+                    console.print("[red]Invalid option. Please choose y, n, or e.[/red]")
+        except (KeyboardInterrupt, EOFError, typer.Abort):
+            console.print("\n[yellow]Execution cancelled by user.[/yellow]")
+            return 130, ""
         
         console.print("[dim yellow]Executing command...\n[/dim yellow]")
         

@@ -168,6 +168,7 @@ class LLMClient:
         )
         
         for chunk in response:
-            content = chunk.choices[0].delta.content
-            if content:
-                yield content
+            if chunk.choices:
+                content = chunk.choices[0].delta.content
+                if content:
+                    yield content
