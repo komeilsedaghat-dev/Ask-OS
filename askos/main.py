@@ -11,10 +11,13 @@ from askos import config
 app = typer.Typer(
     name="askos",
     help="AI-powered CLI assistant to translate natural language into OS commands.",
-    add_completion=False,
+    add_completion=True,
 )
 cache_app = typer.Typer(help="Manage the local SQLite command query cache.")
 app.add_typer(cache_app, name="cache")
+
+profile_app = typer.Typer(help="Manage configuration profiles.")
+app.add_typer(profile_app, name="profile")
 
 console = Console()
 
@@ -48,7 +51,30 @@ def execute_ask_flow(prompt: str, api_key: str, base_url: str, model_name: str, 
             client = LLMClient(api_key=api_key, base_url=base_url, model_name=resolved_model)
             command, was_cached = client.generate_command(prompt)
         
+        # Scan for safety issues
+        from askos.safety import SafetyScanner
+        scanner = SafetyScanner()
+        safety_warnings = scanner.scan(command)
+        
         console.print()
+        if safety_warnings:
+            warning_text = ""
+            for item in safety_warnings:
+                level = item["level"]
+                desc = item["warning"]
+                color = "red" if level in ("HIGH", "CRITICAL") else "yellow"
+                warning_text += f"[bold {color}]⚠️  [{level}] {desc}[/bold {color}]\n"
+            
+            console.print(
+                Panel(
+                    warning_text.strip(),
+                    title="[bold red]⚠️ SAFETY WARNING ⚠️[/bold red]",
+                    border_style="red",
+                    expand=False,
+                )
+            )
+            console.print()
+
         title = "[bold green]Proposed Command (Cached)[/bold green]" if was_cached else "[bold green]Proposed Command[/bold green]"
         console.print(
             Panel(
@@ -91,33 +117,51 @@ def execute_ask_flow(prompt: str, api_key: str, base_url: str, model_name: str, 
         # Log execution
         cache.log_execution(prompt, command, exit_code)
         
-        # If command fails (excluding user cancellation 130), offer self-correction
-        if exit_code != 0 and exit_code != 130:
+        # Loop for iterative self-correction on failure (up to 3 retries)
+        retry_count = 0
+        max_retries = 3
+        current_command = command
+        
+        while exit_code != 0 and exit_code != 130 and retry_count < max_retries:
             console.print()
             correct = typer.confirm(
-                "[bold yellow]⚠ Command failed. Would you like the AI to generate a corrected version?[/bold yellow]",
+                f"[bold yellow]⚠ Command failed (Attempt {retry_count + 1}/{max_retries}). Would you like the AI to generate a corrected version?[/bold yellow]",
                 default=True
             )
-            if correct:
-                console.print("[dim yellow]Analyzing error output and generating correction...[/dim yellow]")
-                client = LLMClient(api_key=api_key, base_url=base_url, model_name=resolved_model)
-                corrected_command = client.generate_correction(prompt, command, output)
+            if not correct:
+                break
                 
-                console.print()
-                console.print(
-                    Panel(
-                        Text(corrected_command, style="bold green"),
-                        title="[bold yellow]Proposed Corrected Command[/bold yellow]",
-                        border_style="yellow",
-                        expand=False,
-                    )
+            retry_count += 1
+            console.print("[dim yellow]Analyzing error output and generating correction...[/dim yellow]")
+            client = LLMClient(api_key=api_key, base_url=base_url, model_name=resolved_model)
+            
+            # Incorporate previous failure context if we are on a subsequent retry
+            if retry_count > 1:
+                augmented_prompt = (
+                    f"Original prompt: {prompt}\n"
+                    f"Correction attempt {retry_count - 1} failed. Please try to generate a different, working command."
                 )
-                console.print()
+            else:
+                augmented_prompt = prompt
                 
-                # Execute the corrected command
-                exit_code, _ = executor.execute(corrected_command)
-                cache.log_execution(prompt + " (corrected)", corrected_command, exit_code)
-                
+            corrected_command = client.generate_correction(augmented_prompt, current_command, output)
+            
+            console.print()
+            console.print(
+                Panel(
+                    Text(corrected_command, style="bold green"),
+                    title=f"[bold yellow]Proposed Corrected Command (Attempt {retry_count})[/bold yellow]",
+                    border_style="yellow",
+                    expand=False,
+                )
+            )
+            console.print()
+            
+            # Execute the corrected command
+            exit_code, output = executor.execute(corrected_command)
+            cache.log_execution(prompt + f" (correction-{retry_count})", corrected_command, exit_code)
+            current_command = corrected_command
+
         raise typer.Exit(code=exit_code)
         
     except typer.Exit:
@@ -290,11 +334,119 @@ def history(
     console.print(table)
     console.print()
 
+@profile_app.command(name="list")
+def profile_list():
+    """
+    List all available profiles.
+    """
+    profiles = config.list_profiles()
+    active = config.get_active_profile()
+    
+    console.print("\n[bold cyan]🔧 Ask-OS Profiles[/bold cyan]\n")
+    for p in profiles:
+        if p == active:
+            console.print(f"  [bold green]* {p} (active)[/bold green]")
+        else:
+            console.print(f"    {p}")
+    console.print()
+
+@profile_app.command(name="use")
+def profile_use(
+    name: str = typer.Argument(..., help="Name of the profile to switch to.")
+):
+    """
+    Switch the active profile.
+    """
+    profiles = config.list_profiles()
+    if name not in profiles:
+        console.print(f"[bold red]Error:[/bold red] Profile '{name}' does not exist.")
+        console.print("Use 'askos profile list' to see all profiles, or 'askos profile create' to make one.")
+        raise typer.Exit(code=1)
+        
+    config.set_active_profile(name)
+    console.print(f"\n[bold green]✓ Switched active profile to '{name}'[/bold green]\n")
+
+@profile_app.command(name="create")
+def profile_create(
+    name: str = typer.Argument(..., help="Name of the new profile to create.")
+):
+    """
+    Create a new configuration profile.
+    """
+    profiles = config.list_profiles()
+    if name in profiles:
+        console.print(f"[yellow]Profile '{name}' already exists. Re-configuring...[/yellow]\n")
+    else:
+        console.print(f"\n[bold cyan]🔧 Creating new profile: '{name}'[/bold cyan]\n")
+        
+    profile_path = config.get_profile_path(name)
+    current_key = ""
+    current_url = "https://api.openai.com/v1"
+    current_model = "gpt-4o-mini"
+    
+    if profile_path.exists():
+        from dotenv import dotenv_values
+        vals = dotenv_values(profile_path)
+        current_key = vals.get("OPENAI_API_KEY", "")
+        current_url = vals.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+        current_model = vals.get("OPENAI_MODEL_NAME", "gpt-4o-mini")
+
+    masked_key = f"...{current_key[-6:]}" if len(current_key) > 6 else ""
+    
+    api_key = typer.prompt(
+        "OpenAI-compatible API Key",
+        default=masked_key,
+        hide_input=True,
+    )
+    if api_key == masked_key:
+        api_key = current_key
+        
+    base_url = typer.prompt(
+        "API Base URL",
+        default=current_url,
+    )
+    
+    model_name = typer.prompt(
+        "Model Name",
+        default=current_model,
+    )
+    
+    config.save_profile_config(name, api_key, base_url, model_name)
+    config.set_active_profile(name)
+    
+    console.print(f"\n[bold green]✓ Profile '{name}' configured and set as active![/bold green]")
+    console.print(f"[dim]Settings saved to: {profile_path}[/dim]\n")
+
+@profile_app.command(name="delete")
+def profile_delete(
+    name: str = typer.Argument(..., help="Name of the profile to delete.")
+):
+    """
+    Delete a configuration profile.
+    """
+    active = config.get_active_profile()
+    if name == active:
+        console.print(f"[bold red]Error:[/bold red] Cannot delete the currently active profile '{name}'.")
+        console.print("Please switch to another profile first using 'askos profile use <other_name>'.")
+        raise typer.Exit(code=1)
+        
+    profiles = config.list_profiles()
+    if name not in profiles:
+        console.print(f"[bold red]Error:[/bold red] Profile '{name}' does not exist.")
+        raise typer.Exit(code=1)
+        
+    confirm = typer.confirm(f"Are you sure you want to delete profile '{name}'?")
+    if confirm:
+        if config.delete_profile(name):
+            console.print(f"\n[bold green]✓ Profile '{name}' deleted successfully.[/bold green]\n")
+        else:
+            console.print(f"\n[bold red]Error:[/bold red] Failed to delete profile '{name}'.\n")
+
 def main_entrypoint():
     """
     Custom wrapper to support calling `askos "prompt"` directly as a default command.
     """
-    subcommands = {"configure", "cache", "history", "--help", "-h"}
+    subcommands = {"configure", "cache", "history", "profile", "--help", "-h"}
     if len(sys.argv) > 1 and sys.argv[1] not in subcommands:
         sys.argv.insert(1, "ask")
     app()

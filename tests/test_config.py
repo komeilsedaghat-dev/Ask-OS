@@ -14,15 +14,16 @@ def test_getters(mocker):
     assert config.get_model_name() == "test_model"
 
 def test_save_global_config(tmp_path, mocker):
-    # Setup temporary config file path
-    temp_config = tmp_path / ".env"
-    mocker.patch("askos.config.GLOBAL_CONFIG_FILE", temp_config)
-    mocker.patch("askos.config.GLOBAL_CONFIG_DIR", tmp_path)
+    temp_dir = tmp_path / "askos"
+    mocker.patch("askos.config.GLOBAL_CONFIG_DIR", temp_dir)
+    mocker.patch("askos.config.PROFILES_DIR", temp_dir / "profiles")
+    mocker.patch("askos.config.ACTIVE_CONFIG_FILE", temp_dir / "config.json")
     
     config.save_global_config("new_key", "https://new.url", "new_model")
     
-    assert temp_config.exists()
-    content = temp_config.read_text()
+    default_profile_file = temp_dir / "profiles" / "default.env"
+    assert default_profile_file.exists()
+    content = default_profile_file.read_text()
     assert "OPENAI_API_KEY=new_key" in content
     assert "OPENAI_BASE_URL=https://new.url" in content
     assert "OPENAI_MODEL_NAME=new_model" in content
