@@ -10,6 +10,12 @@ setup(
         "python-dotenv>=1.0.0",
         "openai>=1.0.0",
     ],
+    extras_require={
+        "dev": [
+            "pytest>=8.0.0",
+            "pytest-mock>=3.10.0",
+        ],
+    },
     entry_points={
         "console_scripts": [
             "askos=askos.main:main_entrypoint",
